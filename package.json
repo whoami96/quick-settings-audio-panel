@@ -24,7 +24,7 @@
     "@girs/giounix-2.0": "^4.1.0",
     "@girs/gjs": "^4.1.0",
     "@girs/gnome-shell": "^51.0.1",
-    "libpanel": "github:Rayzeq/libpanel"
+    "libpanel": "github:Rayzeq/libpanel#8a76c82c4998368860bc2b8e5a929de00b64168d"
   },
   "scripts": {
     "prebuild": "npm run copy-libpanel",
