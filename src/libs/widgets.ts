@@ -25,6 +25,7 @@ import {
 import * as Volume from "resource:///org/gnome/shell/ui/status/volume.js";
 
 import { MediaCardExtras } from "./media_extras.js";
+import { resolve_player_app } from "./player_app.js";
 import { get_pactl_path, spawn, wait_property } from "./utils.js";
 
 const { MixerSinkInput, MixerSink } = Gvc;
@@ -1108,7 +1109,12 @@ const ApplicationVolumeSliderItem = GObject.registerClass(
 // Fields of MprisPlayer used here that are missing from the type definitions
 type MprisPlayerInternals = MprisPlayer & {
 	_busName?: string;
-	source?: { title?: string | null };
+	app?: unknown;
+	source?: {
+		title?: string | null;
+		icon?: Gio.Icon | null;
+		set(properties: { icon?: Gio.Icon | null }): void;
+	};
 };
 
 // Ranking of playback states, a player that can be resumed is more relevant than a stopped one
@@ -1121,6 +1127,9 @@ interface MprisEntry {
 	status: string;
 	activity: number;
 	filtered: boolean;
+	// Icon of the application found by `resolve_player_app`, for players GNOME can't resolve
+	// (`undefined`: not resolved yet, `null`: nothing found)
+	app_icon?: Gio.Icon | null;
 }
 
 export const MprisList = GObject.registerClass(
@@ -1237,6 +1246,7 @@ export const MprisList = GObject.registerClass(
 			this.entries.set(player, entry);
 
 			player.connect_object("changed", () => this._on_player_changed(player), this);
+			this._update_app_icon(player, entry);
 			message.connect_object("notify::visible", () => this._update(), this);
 
 			if (this._single_card && entry.status === "Playing" && !entry.filtered)
@@ -1266,6 +1276,8 @@ export const MprisList = GObject.registerClass(
 
 			// The source title (app name or MPRIS identity) can arrive after the player was added
 			entry.filtered = this._is_filtered(player);
+			// GNOME resets the source icon on every update, apply ours again
+			this._update_app_icon(player, entry);
 
 			const status = player.status;
 			if (status !== entry.status) {
@@ -1277,6 +1289,25 @@ export const MprisList = GObject.registerClass(
 			}
 
 			this._update();
+		}
+
+		_update_app_icon(player: MprisPlayer, entry: MprisEntry) {
+			const source = (player as MprisPlayerInternals).source;
+			// GNOME found the application by itself (from `DesktopEntry`)
+			if (!source || (player as MprisPlayerInternals).app) return;
+
+			if (entry.app_icon === undefined) {
+				entry.app_icon = null;
+				resolve_player_app(player)
+					.then(app => {
+						if (!app || this.entries.get(player) !== entry) return;
+						entry.app_icon = app.get_icon();
+						this._update_app_icon(player, entry);
+					})
+					.catch(e => console.warn(`[QSAP] Failed to find the application of a player: ${e}`));
+				return;
+			}
+			if (entry.app_icon && source.icon !== entry.app_icon) source.set({ icon: entry.app_icon });
 		}
 
 		_is_filtered(player: MprisPlayer): boolean {
