@@ -147,12 +147,6 @@ export default class QSAPPreferences extends ExtensionPreferences {
 				"Add a progress bar with the elapsed and total time. Click or drag it to seek, if the player allows it",
 			),
 		});
-		mpris_controllers_group.add_switch("mpris-controllers-show-volume", {
-			title: _("Show the application volume"),
-			subtitle: _(
-				"Add a volume slider for the application behind the player. Hidden when no audio stream of that application is found (e.g. players from a phone)",
-			),
-		});
 
 		const applications_volume_sliders_group = new ListBox(settings);
 		applications_volume_sliders_group.add_switch("applications-volume-sliders-display-name", {

@@ -2,12 +2,10 @@ import Clutter from "gi://Clutter";
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import GObject from "gi://GObject";
-import type Gvc from "gi://Gvc";
 import St from "gi://St";
 
 import type { MprisPlayer } from "resource:///org/gnome/shell/ui/mpris.js";
 import { Slider } from "resource:///org/gnome/shell/ui/slider.js";
-import * as Volume from "resource:///org/gnome/shell/ui/status/volume.js";
 
 const MPRIS_PATH = "/org/mpris/MediaPlayer2";
 const MPRIS_PLAYER_IFACE = "org.mpris.MediaPlayer2.Player";
@@ -16,17 +14,8 @@ const POSITION_POLL_MS = 1000;
 // Fields of MprisPlayer used here that are missing from the type definitions
 type MprisPlayerInternals = MprisPlayer & {
 	_busName: string;
-	_app?: { get_name(): string; get_id(): string } | null;
-	_mprisProxy?: { Identity?: string; DesktopEntry?: string } | null;
 	_playerProxy?: { Metadata?: Record<string, GLib.Variant> } | null;
 };
-
-function normalize(value: string | null | undefined): string {
-	return (value ?? "")
-		.toLowerCase()
-		.replace(/\.desktop$/, "")
-		.replace(/[^a-z0-9]/g, "");
-}
 
 function format_time(us: number): string {
 	const total = Math.max(0, Math.floor(us / GLib.USEC_PER_SEC));
@@ -38,38 +27,6 @@ function format_time(us: number): string {
 		: `${minutes}:${seconds}`;
 }
 
-/**
- * Names under which a player can be identified.
- *
- * When the player declares a desktop entry, only that entry (and the matching application) is
- * used: the MPRIS identity is not reliable, e.g. GSConnect mirrors the phone's Spotify with the
- * identity "Spotify" but the desktop entry "org.gnome.Shell.Extensions.GSConnect", and must
- * not get the volume of a local Spotify. Otherwise (e.g. Chrome doesn't set it), fall back to
- * the identity ("Chrome") and the player part of the bus name
- * ("org.mpris.MediaPlayer2.chromium.instance1234" => "chromium").
- */
-function player_keys(player: MprisPlayerInternals): string[] {
-	const desktop_entry = player._mprisProxy?.DesktopEntry;
-	const keys = desktop_entry
-		? [desktop_entry, player._app?.get_name(), player._app?.get_id()]
-		: [
-				player._mprisProxy?.Identity,
-				player._busName?.replace(/^org\.mpris\.MediaPlayer2\./, "").replace(/\.instance.*$/, ""),
-			];
-	return keys.map(normalize).filter(key => key.length >= 3);
-}
-
-function stream_matches(stream: Gvc.MixerStream, keys: string[]): boolean {
-	const stream_keys = [stream.name, stream.application_id, stream.icon_name]
-		.map(normalize)
-		.filter(key => key.length >= 3);
-	return keys.some(key =>
-		stream_keys.some(
-			stream_key => stream_key === key || stream_key.includes(key) || key.includes(stream_key),
-		),
-	);
-}
-
 // A slider that ignores scroll events, so that scrolling over the card still switches players
 const NoScrollSlider = GObject.registerClass(
 	class NoScrollSlider extends Slider {
@@ -78,124 +35,6 @@ const NoScrollSlider = GObject.registerClass(
 			for (const action of this.get_actions()) {
 				if (action instanceof Clutter.ScrollController) this.remove_action(action);
 			}
-		}
-	},
-);
-
-/**
- * Volume slider controlling the audio streams (sink inputs) of the application behind an MPRIS
- * player. Hidden when no matching stream exists (e.g. players mirrored from a phone).
- */
-const PlayerVolume = GObject.registerClass(
-	class PlayerVolume extends St.BoxLayout {
-		private _player: MprisPlayerInternals;
-		private _control: Gvc.MixerControl;
-		private _streams: Gvc.MixerStream[];
-		private _mute_button: St.Button;
-		private _slider: InstanceType<typeof Slider>;
-		private _slider_changed_id: number;
-		private _in_drag: boolean;
-
-		constructor(player: MprisPlayer) {
-			super({
-				style_class: "QSAP-media-volume",
-				x_expand: true,
-				visible: false,
-			});
-			this._player = player as MprisPlayerInternals;
-			this._control = Volume.getMixerControl();
-			this._streams = [];
-			this._in_drag = false;
-
-			this._mute_button = new St.Button({
-				style_class: "QSAP-media-volume-icon",
-				can_focus: true,
-				child: new St.Icon({ icon_name: "audio-volume-high-symbolic", icon_size: 16 }),
-			});
-			this._mute_button.connect("clicked", () => this._toggle_mute());
-			this.add_child(this._mute_button);
-
-			this._slider = new Slider(0);
-			this._slider.accessible_name = "Volume";
-			this._slider_changed_id = this._slider.connect("notify::value", () => this._on_slider());
-			this._slider.connect("drag-begin", () => (this._in_drag = true));
-			this._slider.connect("drag-end", () => {
-				this._in_drag = false;
-				this._sync();
-			});
-			this.add_child(this._slider);
-
-			this._control.connect_object(
-				"stream-added",
-				() => this._find_streams(),
-				"stream-removed",
-				() => this._find_streams(),
-				this,
-			);
-			this._player.connect_object("changed", () => this._find_streams(), this);
-			this._find_streams();
-		}
-
-		private _find_streams() {
-			const keys = player_keys(this._player);
-			const streams = this._control
-				.get_sink_inputs()
-				.filter(stream => !stream.is_event_stream && stream_matches(stream, keys));
-
-			const same =
-				streams.length === this._streams.length &&
-				streams.every(stream => this._streams.includes(stream));
-			if (same) return;
-
-			for (const stream of this._streams) stream.disconnect_object(this);
-			this._streams = streams;
-			for (const stream of this._streams) {
-				stream.connect_object(
-					"notify::volume",
-					() => this._sync(),
-					"notify::is-muted",
-					() => this._sync(),
-					this,
-				);
-			}
-			this.visible = this._streams.length > 0;
-			this._sync();
-		}
-
-		private _sync() {
-			if (this._streams.length === 0 || this._in_drag) return;
-
-			const max = this._control.get_vol_max_norm();
-			const muted = this._streams.every(stream => stream.is_muted);
-			const volume = Math.max(...this._streams.map(stream => stream.volume)) / max;
-
-			this._slider.block_signal_handler(this._slider_changed_id);
-			this._slider.value = muted ? 0 : Math.min(volume, 1);
-			this._slider.unblock_signal_handler(this._slider_changed_id);
-			this._update_icon(muted ? 0 : volume);
-		}
-
-		private _update_icon(volume: number) {
-			let icon_name = "audio-volume-muted-symbolic";
-			if (volume > 0.66) icon_name = "audio-volume-high-symbolic";
-			else if (volume > 0.33) icon_name = "audio-volume-medium-symbolic";
-			else if (volume > 0) icon_name = "audio-volume-low-symbolic";
-			(this._mute_button.child as St.Icon).icon_name = icon_name;
-		}
-
-		private _on_slider() {
-			const volume = this._slider.value * this._control.get_vol_max_norm();
-			for (const stream of this._streams) {
-				if (stream.is_muted && volume > 0) stream.change_is_muted(false);
-				stream.volume = volume;
-				stream.push_volume();
-			}
-			this._update_icon(this._slider.value);
-		}
-
-		private _toggle_mute() {
-			const muted = this._streams.every(stream => stream.is_muted);
-			for (const stream of this._streams) stream.change_is_muted(!muted);
 		}
 	},
 );
@@ -392,19 +231,18 @@ const PlayerProgress = GObject.registerClass(
 );
 
 /**
- * Extra rows added at the bottom of a media card: track progress and application volume.
+ * Extra rows added at the bottom of a media card (currently only the track progress).
  */
 export const MediaCardExtras = GObject.registerClass(
 	class MediaCardExtras extends St.BoxLayout {
-		constructor(player: MprisPlayer, show_progress: boolean, show_volume: boolean) {
+		constructor(player: MprisPlayer) {
 			super({
 				style_class: "QSAP-media-extras",
 				orientation: Clutter.Orientation.VERTICAL,
 				x_expand: true,
 			});
 
-			if (show_progress) this.add_child(new PlayerProgress(player));
-			if (show_volume) this.add_child(new PlayerVolume(player));
+			this.add_child(new PlayerProgress(player));
 		}
 	},
 );

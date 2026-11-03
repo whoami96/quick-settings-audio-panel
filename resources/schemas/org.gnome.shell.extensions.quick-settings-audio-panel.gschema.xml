@@ -102,9 +102,6 @@
     <key name="mpris-controllers-show-progress" type="b">
       <default>false</default>
     </key>
-    <key name="mpris-controllers-show-volume" type="b">
-      <default>false</default>
-    </key>
     <key name="mpris-controllers-filter-mode" type="s">
       <choices>
         <choice value="blacklist" />

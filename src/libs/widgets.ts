@@ -1135,7 +1135,6 @@ export const MprisList = GObject.registerClass(
 		private _single_card: boolean;
 		private _hide_stopped: boolean;
 		private _show_progress: boolean;
-		private _show_volume: boolean;
 		private _filter_mode: string;
 		private _filters: RegExp[];
 
@@ -1156,7 +1155,6 @@ export const MprisList = GObject.registerClass(
 			filter_mode = "blacklist",
 			filters = [] as string[],
 			show_progress = false,
-			show_volume = false,
 		} = {}) {
 			super({
 				orientation: Clutter.Orientation.VERTICAL,
@@ -1168,7 +1166,6 @@ export const MprisList = GObject.registerClass(
 			this._single_card = single_card;
 			this._hide_stopped = hide_stopped;
 			this._show_progress = show_progress;
-			this._show_volume = show_volume;
 			this._filter_mode = filter_mode;
 			this._filters = filters.map(f => new RegExp(f));
 			this._selected = null;
@@ -1220,12 +1217,10 @@ export const MprisList = GObject.registerClass(
 			if (this.entries.has(player)) return;
 
 			const message = GObject.Object.new(MprisList.MediaMessage, player);
-			if (this._show_progress || this._show_volume) {
+			if (this._show_progress) {
 				// The message content is a vertical box (header, body, actions), the extras go at
 				// its bottom so that they are part of the card
-				message
-					.get_child()
-					?.add_child(new MediaCardExtras(player, this._show_progress, this._show_volume));
+				message.get_child()?.add_child(new MediaCardExtras(player));
 			}
 			// MediaMessage manages its own `visible` property (notification policy), so it is
 			// wrapped in a bin that we can show and hide freely in single card mode

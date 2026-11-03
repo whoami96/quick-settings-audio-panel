@@ -363,7 +363,6 @@ export default class QSAP extends Extension {
 			filter_mode: this.settings.get_string("mpris-controllers-filter-mode"),
 			filters: this.settings.get_strv("mpris-controllers-filters"),
 			show_progress: this.settings.get_boolean("mpris-controllers-show-progress"),
-			show_volume: this.settings.get_boolean("mpris-controllers-show-volume"),
 		});
 		this._media_section.add_style_class_name("QSAP-media-section");
 		if (!this.settings.get_boolean("ignore-css")) {

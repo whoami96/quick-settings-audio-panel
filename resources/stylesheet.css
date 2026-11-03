@@ -66,14 +66,13 @@
 	border-radius: 99px;
 }
 
-/* Progress bar and volume slider at the bottom of media cards */
+/* Progress bar at the bottom of media cards */
 .QSAP-media-extras {
 	spacing: 4px;
 	padding: 0px 12px 8px 12px;
 }
 
-.QSAP-media-progress,
-.QSAP-media-volume {
+.QSAP-media-progress {
 	spacing: 8px;
 }
 
@@ -81,9 +80,4 @@
 	font-size: 9pt;
 	font-feature-settings: "tnum";
 	min-width: 32px;
-}
-
-.QSAP-media-volume-icon {
-	padding: 2px;
-	border-radius: 99px;
 }
