@@ -24,6 +24,7 @@ import {
 } from "resource:///org/gnome/shell/ui/quickSettings.js";
 import * as Volume from "resource:///org/gnome/shell/ui/status/volume.js";
 
+import { MediaCardExtras } from "./media_extras.js";
 import { get_pactl_path, spawn, wait_property } from "./utils.js";
 
 const { MixerSinkInput, MixerSink } = Gvc;
@@ -1104,22 +1105,102 @@ const ApplicationVolumeSliderItem = GObject.registerClass(
 	},
 );
 
+// Fields of MprisPlayer used here that are missing from the type definitions
+type MprisPlayerInternals = MprisPlayer & {
+	_busName?: string;
+	source?: { title?: string | null };
+};
+
+// Ranking of playback states, a player that can be resumed is more relevant than a stopped one
+const STATUS_RANK: Record<string, number> = { Playing: 2, Paused: 1, Stopped: 0 };
+const SWITCH_ANIMATION_MS = 250;
+
+interface MprisEntry {
+	bin: St.Bin;
+	message: MediaMessage;
+	status: string;
+	activity: number;
+	filtered: boolean;
+}
+
 export const MprisList = GObject.registerClass(
 	class MprisList extends St.BoxLayout {
 		// MediaMessage isn't exported, gotta get creative
 		private static MediaMessage = GObject.type_from_name("Gjs_ui_messageList_MediaMessage");
 
 		private source: MprisSource;
-		private messages: Map<MprisPlayer, MediaMessage>;
+		private entries: Map<MprisPlayer, MprisEntry>;
 
-		constructor() {
+		// Single card mode: only one player is shown at a time, with dots to switch between them
+		private _single_card: boolean;
+		private _hide_stopped: boolean;
+		private _show_progress: boolean;
+		private _show_volume: boolean;
+		private _filter_mode: string;
+		private _filters: RegExp[];
+
+		private _cards: St.Widget;
+		private _dots: St.BoxLayout;
+		private _selected: MprisPlayer | null;
+		// Player whose card is currently on screen, used to animate the switch to `_selected`
+		private _displayed: MprisPlayer | null;
+		// Direction of the next switch animation (1: next, -1: previous), set by scroll and dots
+		private _switch_direction: number | null;
+		// Monotonic counter used to order players by their last playback state change
+		private _activity_counter: number;
+		private _last_scroll_time: number;
+
+		constructor({
+			single_card = false,
+			hide_stopped = false,
+			filter_mode = "blacklist",
+			filters = [] as string[],
+			show_progress = false,
+			show_volume = false,
+		} = {}) {
 			super({
 				orientation: Clutter.Orientation.VERTICAL,
-				style: "spacing: 12px;",
+				style: "spacing: 6px;",
 				visible: false,
+				reactive: true,
 			});
 
-			this.messages = new Map();
+			this._single_card = single_card;
+			this._hide_stopped = hide_stopped;
+			this._show_progress = show_progress;
+			this._show_volume = show_volume;
+			this._filter_mode = filter_mode;
+			this._filters = filters.map(f => new RegExp(f));
+			this._selected = null;
+			this._displayed = null;
+			this._switch_direction = null;
+			this._activity_counter = 0;
+			this._last_scroll_time = 0;
+
+			this._cards = this._single_card
+				? // Cards overlap so that the old and the new one can slide at the same time
+					new St.Widget({
+						layout_manager: new Clutter.BinLayout(),
+						clip_to_allocation: true,
+						x_expand: true,
+					})
+				: new St.BoxLayout({
+						orientation: Clutter.Orientation.VERTICAL,
+						style: "spacing: 12px;",
+						x_expand: true,
+					});
+			this.add_child(this._cards);
+
+			this._dots = new St.BoxLayout({
+				style_class: "QSAP-media-dots",
+				x_align: Clutter.ActorAlign.CENTER,
+				visible: false,
+			});
+			this.add_child(this._dots);
+
+			if (this._single_card) this.connect("scroll-event", (_, event) => this._on_scroll(event));
+
+			this.entries = new Map();
 			this.source = new MprisSource();
 
 			this.source.connect_object(
@@ -1136,23 +1217,249 @@ export const MprisList = GObject.registerClass(
 		}
 
 		_add_player(player: MprisPlayer) {
-			if (!this.messages.has(player)) {
-				const message = GObject.Object.new(MprisList.MediaMessage, player);
-				this.add_child(message);
-				this.messages.set(player, message);
+			if (this.entries.has(player)) return;
 
-				this.visible = true;
+			const message = GObject.Object.new(MprisList.MediaMessage, player);
+			if (this._show_progress || this._show_volume) {
+				// The message content is a vertical box (header, body, actions), the extras go at
+				// its bottom so that they are part of the card
+				message
+					.get_child()
+					?.add_child(new MediaCardExtras(player, this._show_progress, this._show_volume));
 			}
+			// MediaMessage manages its own `visible` property (notification policy), so it is
+			// wrapped in a bin that we can show and hide freely in single card mode
+			const bin = new St.Bin({ child: message, x_expand: true });
+			this._cards.add_child(bin);
+
+			const entry: MprisEntry = {
+				bin,
+				message,
+				status: player.status,
+				activity: player.status === "Playing" ? ++this._activity_counter : 0,
+				filtered: this._is_filtered(player),
+			};
+			this.entries.set(player, entry);
+
+			player.connect_object("changed", () => this._on_player_changed(player), this);
+			message.connect_object("notify::visible", () => this._update(), this);
+
+			if (this._single_card && entry.status === "Playing" && !entry.filtered)
+				this._selected = player;
+
+			this._update();
 		}
 
 		_remove_player(player: MprisPlayer) {
-			const message = this.messages.get(player);
-			if (message) {
-				this.remove_child(message);
-				this.messages.delete(player);
+			const entry = this.entries.get(player);
+			if (!entry) return;
 
-				if (this.messages.size === 0) this.visible = false;
+			player.disconnect_object(this);
+			entry.message.disconnect_object(this);
+			this._cards.remove_child(entry.bin);
+			entry.bin.destroy();
+			this.entries.delete(player);
+
+			if (this._selected === player) this._selected = null;
+			if (this._displayed === player) this._displayed = null;
+			this._update();
+		}
+
+		_on_player_changed(player: MprisPlayer) {
+			const entry = this.entries.get(player);
+			if (!entry) return;
+
+			// The source title (app name or MPRIS identity) can arrive after the player was added
+			entry.filtered = this._is_filtered(player);
+
+			const status = player.status;
+			if (status !== entry.status) {
+				entry.status = status;
+				entry.activity = ++this._activity_counter;
+				// A player that starts playing takes over the card, even if another one was
+				// selected manually
+				if (this._single_card && status === "Playing" && !entry.filtered) this._selected = player;
 			}
+
+			this._update();
+		}
+
+		_is_filtered(player: MprisPlayer): boolean {
+			if (this._filters.length === 0) return false;
+
+			// Match against the displayed name (e.g. "GSConnect") and the D-Bus name
+			// (e.g. "org.mpris.MediaPlayer2.chromium.instance1234")
+			const internals = player as MprisPlayerInternals;
+			const candidates = [internals.source?.title, internals._busName].filter(
+				(s): s is string => typeof s === "string" && s.length > 0,
+			);
+			const matched = this._filters.some(filter => candidates.some(c => filter.test(c)));
+
+			return this._filter_mode === "whitelist" ? !matched : matched;
+		}
+
+		// Players that can be shown, ordered by relevance: playing, then paused, then stopped,
+		// and by last activity within the same state
+		_get_shown_players(): MprisPlayer[] {
+			return [...this.entries.entries()]
+				.filter(
+					([_, entry]) =>
+						!entry.filtered &&
+						entry.message.visible &&
+						!(this._hide_stopped && entry.status === "Stopped"),
+				)
+				.sort(([_a, a], [_b, b]) => {
+					const rank = (STATUS_RANK[b.status] ?? 0) - (STATUS_RANK[a.status] ?? 0);
+					if (rank !== 0) return rank;
+					return b.activity - a.activity;
+				})
+				.map(([player]) => player);
+		}
+
+		_update() {
+			const shown = this._get_shown_players();
+
+			if (!this._single_card) {
+				for (const [player, entry] of this.entries) entry.bin.visible = shown.includes(player);
+				this._dots.visible = false;
+				this.visible = shown.length > 0;
+				return;
+			}
+
+			if (this._selected === null || !shown.includes(this._selected))
+				this._selected = shown[0] ?? null;
+
+			// Keep a stable order for the dots (insertion order), independent of relevance
+			const ordered = [...this.entries.keys()].filter(player => shown.includes(player));
+			this._show_selected_card(ordered);
+
+			this._dots.destroy_all_children();
+			if (ordered.length > 1) {
+				for (const player of ordered) {
+					const dot = new St.Button({
+						style_class: "QSAP-media-dot",
+						can_focus: true,
+						accessible_name: (player as MprisPlayerInternals).source?.title ?? "",
+						child: new St.Icon({ icon_name: "media-record-symbolic", icon_size: 8 }),
+					});
+					// St doesn't support CSS opacity, so the active dot is highlighted from code
+					const selected = player === this._selected;
+					const update_opacity = () => {
+						dot.opacity = selected ? 255 : dot.hover || dot.has_key_focus() ? 200 : 100;
+					};
+					update_opacity();
+					dot.connect("notify::hover", update_opacity);
+					dot.connect("key-focus-in", update_opacity);
+					dot.connect("key-focus-out", update_opacity);
+					dot.connect("clicked", () => this._select(player));
+					this._dots.add_child(dot);
+				}
+			}
+			this._dots.visible = ordered.length > 1;
+			this.visible = shown.length > 0;
+		}
+
+		_show_selected_card(ordered: MprisPlayer[]) {
+			const previous = this._displayed;
+			const next = this._selected;
+			const direction = this._switch_direction;
+			this._switch_direction = null;
+			this._displayed = next;
+
+			const previous_entry = previous ? this.entries.get(previous) : undefined;
+			const next_entry = next ? this.entries.get(next) : undefined;
+			const animate =
+				this.mapped &&
+				previous_entry !== undefined &&
+				next_entry !== undefined &&
+				previous !== next &&
+				previous_entry.bin.visible;
+
+			for (const [player, entry] of this.entries) {
+				if (animate && (player === previous || player === next)) continue;
+				// Updates also happen while a switch animation is running (players emit `changed`
+				// often), let a running animation finish instead of cutting it
+				if (!animate && previous === next && entry.bin.get_transition("translation-x")) continue;
+				entry.bin.remove_all_transitions();
+				entry.bin.translation_x = 0;
+				entry.bin.opacity = 255;
+				entry.bin.visible = player === next;
+			}
+			if (!animate || !previous_entry || !next_entry || !previous || !next) return;
+
+			// Slide towards the direction of the switch: the new card comes from the right when
+			// going to the next player, from the left when going back
+			const step = direction ?? (Math.sign(ordered.indexOf(next) - ordered.indexOf(previous)) || 1);
+			const offset = this._cards.width * (step < 0 ? -1 : 1);
+
+			previous_entry.bin.remove_all_transitions();
+			previous_entry.bin.ease({
+				translation_x: -offset,
+				opacity: 0,
+				duration: SWITCH_ANIMATION_MS,
+				mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+				onStopped: () => {
+					if (this._displayed !== previous) {
+						previous_entry.bin.visible = false;
+						previous_entry.bin.translation_x = 0;
+						previous_entry.bin.opacity = 255;
+					}
+				},
+			});
+
+			next_entry.bin.remove_all_transitions();
+			next_entry.bin.visible = true;
+			next_entry.bin.translation_x = offset;
+			next_entry.bin.opacity = 0;
+			next_entry.bin.ease({
+				translation_x: 0,
+				opacity: 255,
+				duration: SWITCH_ANIMATION_MS,
+				mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+			});
+		}
+
+		_select(player: MprisPlayer, direction: number | null = null) {
+			this._selected = player;
+			this._switch_direction = direction;
+			this._update();
+		}
+
+		_on_scroll(event: Clutter.Event): boolean {
+			const ordered = [...this.entries.keys()].filter(player =>
+				this._get_shown_players().includes(player),
+			);
+			if (ordered.length < 2 || this._selected === null) return Clutter.EVENT_PROPAGATE;
+
+			let step = 0;
+			switch (event.get_scroll_direction()) {
+				case Clutter.ScrollDirection.UP:
+				case Clutter.ScrollDirection.LEFT:
+					step = -1;
+					break;
+				case Clutter.ScrollDirection.DOWN:
+				case Clutter.ScrollDirection.RIGHT:
+					step = 1;
+					break;
+				case Clutter.ScrollDirection.SMOOTH: {
+					const [dx, dy] = event.get_scroll_delta();
+					const delta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+					if (Math.abs(delta) < 0.5) return Clutter.EVENT_STOP;
+					step = delta > 0 ? 1 : -1;
+					break;
+				}
+			}
+			if (step === 0) return Clutter.EVENT_PROPAGATE;
+
+			// Touchpads emit many smooth scroll events per gesture, switch at most once per 250ms
+			const now = GLib.get_monotonic_time();
+			if (now - this._last_scroll_time < 250_000) return Clutter.EVENT_STOP;
+			this._last_scroll_time = now;
+
+			const index = ordered.indexOf(this._selected);
+			const next = ordered[(index + step + ordered.length) % ordered.length];
+			if (next) this._select(next, step);
+			return Clutter.EVENT_STOP;
 		}
 	},
 );

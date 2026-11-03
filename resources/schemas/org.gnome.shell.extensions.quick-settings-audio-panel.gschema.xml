@@ -93,6 +93,28 @@
     <key name="mpris-controllers-are-moved" type="b">
       <default>true</default>
     </key>
+    <key name="mpris-controllers-single-card" type="b">
+      <default>false</default>
+    </key>
+    <key name="mpris-controllers-hide-stopped" type="b">
+      <default>false</default>
+    </key>
+    <key name="mpris-controllers-show-progress" type="b">
+      <default>false</default>
+    </key>
+    <key name="mpris-controllers-show-volume" type="b">
+      <default>false</default>
+    </key>
+    <key name="mpris-controllers-filter-mode" type="s">
+      <choices>
+        <choice value="blacklist" />
+        <choice value="whitelist" />
+      </choices>
+      <default>"blacklist"</default>
+    </key>
+    <key name="mpris-controllers-filters" type="as">
+      <default>[]</default>
+    </key>
 
     <key name="create-applications-volume-sliders" type="b">
       <default>true</default>
@@ -118,6 +140,24 @@
     </key>
     <key name="applications-volume-sliders-filters" type="as">
       <default>[]</default>
+    </key>
+
+    <key name="preferred-devices-enabled" type="b">
+      <default>false</default>
+    </key>
+    <!-- Priority lists of PulseAudio device names, the first available one becomes the default -->
+    <key name="preferred-output-devices" type="as">
+      <default>[]</default>
+    </key>
+    <key name="preferred-input-devices" type="as">
+      <default>[]</default>
+    </key>
+    <!-- Saved by the extension (name => description) because the preferences can't use Gvc -->
+    <key name="known-output-devices" type="a{ss}">
+      <default>{}</default>
+    </key>
+    <key name="known-input-devices" type="a{ss}">
+      <default>{}</default>
     </key>
 
     <key name="profiles-renames" type="a{sa{s(ss)}}">

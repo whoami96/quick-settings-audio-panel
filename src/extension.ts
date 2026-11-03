@@ -39,6 +39,7 @@ import type {} from "@libpanel/../ambient.js";
 import { LibPanel, Panel } from "@libpanel/main.js";
 
 import { update_settings } from "./libs/preferences.js";
+import { PreferredDevices } from "./libs/preferred_devices.js";
 import { cleanup_idle_ids, get_pactl_path, spawn, wait_property } from "./libs/utils.js";
 import {
 	ApplicationsMixer,
@@ -108,9 +109,14 @@ export default class QSAP extends Extension {
 			"add-button-applications-output-reset-to-default",
 		);
 
+		this._preferred_devices = new PreferredDevices(this.settings);
+
 		this._master_volumes = [];
 		this._sc_callback = this.settings.connect("changed", async (_, name) => {
 			if (
+				// handled by `PreferredDevices`, no need to rebuild the panel
+				!name.startsWith("preferred-") &&
+				!name.startsWith("known-") &&
 				name !== "autohide-profile-switcher" &&
 				name !== "ignore-virtual-capture-streams" &&
 				name !== "always-show-input-volume-slider" &&
@@ -136,6 +142,9 @@ export default class QSAP extends Extension {
 		cleanup_idle_ids();
 
 		this._cleanup_panel();
+
+		this._preferred_devices.destroy();
+		this._preferred_devices = undefined;
 
 		this._extension_controller.destroy();
 		this._extension_controller = undefined;
@@ -309,6 +318,7 @@ export default class QSAP extends Extension {
 
 		if (this._media_section) {
 			this._panel.removeItem(this._media_section);
+			this._media_section.destroy();
 			this._media_section = null;
 		}
 		if (MessageView_DateMenu._qsap_media_removed) {
@@ -347,7 +357,14 @@ export default class QSAP extends Extension {
 	}
 
 	_create_media_controls(index: number) {
-		this._media_section = new MprisList();
+		this._media_section = new MprisList({
+			single_card: this.settings.get_boolean("mpris-controllers-single-card"),
+			hide_stopped: this.settings.get_boolean("mpris-controllers-hide-stopped"),
+			filter_mode: this.settings.get_string("mpris-controllers-filter-mode"),
+			filters: this.settings.get_strv("mpris-controllers-filters"),
+			show_progress: this.settings.get_boolean("mpris-controllers-show-progress"),
+			show_volume: this.settings.get_boolean("mpris-controllers-show-volume"),
+		});
 		this._media_section.add_style_class_name("QSAP-media-section");
 		if (!this.settings.get_boolean("ignore-css")) {
 			this._media_section.add_style_class_name("QSAP-media-section-optional");

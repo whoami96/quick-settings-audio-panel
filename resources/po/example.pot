@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-03 13:56+0100\n"
+"POT-Creation-Date: 2026-11-03 14:46+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,7 +17,7 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: dist/extension.js:378
+#: dist/extension.js:394
 msgid "Reset all applications to default output"
 msgstr ""
 
@@ -136,203 +136,307 @@ msgid ""
 "new one"
 msgstr ""
 
+#: dist/prefs.js:98
+msgid "Show a single media card"
+msgstr ""
+
 #: dist/prefs.js:99
-msgid "Display the name of the application and the stream"
+msgid ""
+"Only show the most relevant player (the one playing, or the last one used). "
+"Switch between players with the dots below the card or by scrolling over it"
 msgstr ""
 
 #: dist/prefs.js:102
-msgid "Put the sliders in submenu"
+msgid "Hide stopped players"
 msgstr ""
 
 #: dist/prefs.js:103
+msgid ""
+"Hide players that are stopped (not just paused), e.g. a phone connected with "
+"GSConnect on which nothing is playing"
+msgstr ""
+
+#: dist/prefs.js:106
+msgid "Show the track progress"
+msgstr ""
+
+#: dist/prefs.js:107
+msgid ""
+"Add a progress bar with the elapsed and total time. Click or drag it to "
+"seek, if the player allows it"
+msgstr ""
+
+#: dist/prefs.js:110
+msgid "Show the application volume"
+msgstr ""
+
+#: dist/prefs.js:111
+msgid ""
+"Add a volume slider for the application behind the player. Hidden when no "
+"audio stream of that application is found (e.g. players from a phone)"
+msgstr ""
+
+#: dist/prefs.js:115
+msgid "Display the name of the application and the stream"
+msgstr ""
+
+#: dist/prefs.js:118
+msgid "Put the sliders in submenu"
+msgstr ""
+
+#: dist/prefs.js:119
 msgid ""
 "<span color=\"darkorange\" weight=\"bold\">This will disable the ability to "
 "change the output device per application</span>"
 msgstr ""
 
-#: dist/prefs.js:106
+#: dist/prefs.js:122
 msgid "Combine streams from the same application"
 msgstr ""
 
-#: dist/prefs.js:107
+#: dist/prefs.js:123
 msgid ""
 "Show one slider for an application with multiple audio streams. Volume and "
 "mute changes apply to every stream."
 msgstr ""
 
-#: dist/prefs.js:110
+#: dist/prefs.js:126
 msgid "Allow automatic execution of <tt>pactl</tt>"
 msgstr ""
 
-#: dist/prefs.js:111
+#: dist/prefs.js:127
 msgid ""
 "This feature might cause some minor lag, but it's necessary to get the real "
 "name of Chromium applications and detect the application's current output "
 "device"
 msgstr ""
 
-#: dist/prefs.js:115
+#: dist/prefs.js:131
 msgid "Elements order"
 msgstr ""
 
-#: dist/prefs.js:116
+#: dist/prefs.js:132
 msgid "Reorder elements in the new panel"
 msgstr ""
 
-#: dist/prefs.js:120
+#: dist/prefs.js:136
 msgid "Profile switcher"
 msgstr ""
 
-#: dist/prefs.js:121
+#: dist/prefs.js:137
 msgid "Allows you to quickly change the audio profile of the current device"
 msgstr ""
 
-#: dist/prefs.js:127
+#: dist/prefs.js:143
 msgid "Speaker / Headphone volume slider"
 msgstr ""
 
-#: dist/prefs.js:132
+#: dist/prefs.js:148
 msgid "Per-device volume sliders"
 msgstr ""
 
-#: dist/prefs.js:137
+#: dist/prefs.js:153
 msgid "Audio balance slider"
 msgstr ""
 
-#: dist/prefs.js:141
+#: dist/prefs.js:157
 msgid "Microphone volume slider"
 msgstr ""
 
-#: dist/prefs.js:145
+#: dist/prefs.js:161
 msgid "Media controls"
 msgstr ""
 
-#: dist/prefs.js:150
+#: dist/prefs.js:166
 msgid "Applications mixer"
 msgstr ""
 
-#: dist/prefs.js:157
+#: dist/prefs.js:173
 msgid "The same sliders you can find in pavucontrol or in the sound settings"
 msgstr ""
 
-#: dist/prefs.js:161
+#: dist/prefs.js:177
 msgid ""
 "<span color=\"darkorange\" weight=\"bold\"><tt>pactl</tt> was not found, you "
 "won't be able to change the output device per application</span>"
 msgstr ""
 
-#: dist/prefs.js:166
+#: dist/prefs.js:182
 msgid ""
 "This slider allows you to change the balance of the current audio output"
 msgstr ""
 
-#: dist/prefs.js:171 dist/prefs.js:182
+#: dist/prefs.js:187 dist/prefs.js:198
 msgid ""
 "<span color=\"red\" weight=\"bold\">This feature needs <tt>pactl</tt></span>"
 msgstr ""
 
-#: dist/prefs.js:177
+#: dist/prefs.js:193
 msgid "This include for example the echo cancellation module"
 msgstr ""
 
-#: dist/prefs.js:200
+#: dist/prefs.js:216
 msgid "Per-device sliders filtering"
 msgstr ""
 
-#: dist/prefs.js:201
+#: dist/prefs.js:217
 msgid ""
 "Allows you to filter the per-device volume sliders. The content of the "
 "filters are <b>regexes</b> and are applied to the device's display name and "
 "pulseaudio name."
 msgstr ""
 
-#: dist/prefs.js:202
+#: dist/prefs.js:218
 msgid "Device name"
 msgstr ""
 
-#: dist/prefs.js:206
+#: dist/prefs.js:222
 msgid "Application mixer filtering"
 msgstr ""
 
-#: dist/prefs.js:207
+#: dist/prefs.js:223
 msgid ""
 "Allows you to filter the applications that show up in the application mixer "
 "<b>using regexes</b>"
 msgstr ""
 
-#: dist/prefs.js:208
+#: dist/prefs.js:224
 msgid "Application name"
 msgstr ""
 
-#: dist/prefs.js:219
+#: dist/prefs.js:228
+msgid "Media controls filtering"
+msgstr ""
+
+#: dist/prefs.js:229
+msgid ""
+"Allows you to filter the players that show up in the media controls. The "
+"content of the filters are <b>regexes</b> and are applied to the player's "
+"name (e.g. <tt>GSConnect</tt>) and D-Bus name (e.g. "
+"<tt>org.mpris.MediaPlayer2.chromium.instance1234</tt>)"
+msgstr ""
+
+#: dist/prefs.js:230
+msgid "Player name"
+msgstr ""
+
+#: dist/prefs.js:243
+msgid "Preferred devices"
+msgstr ""
+
+#: dist/prefs.js:244
+msgid ""
+"The first available device of each list becomes the default one when the "
+"session starts and when a device is connected or disconnected. Manual "
+"changes are kept until the next device change. Devices only show up here "
+"after being connected at least once while the extension is enabled"
+msgstr ""
+
+#: dist/prefs.js:246
+msgid "Manage default devices"
+msgstr ""
+
+#: dist/prefs.js:250
+msgid "Output devices priority"
+msgstr ""
+
+#: dist/prefs.js:251
+msgid "Input devices priority"
+msgstr ""
+
+#: dist/prefs.js:262
 msgid "Profile renamer"
 msgstr ""
 
-#: dist/prefs.js:220
+#: dist/prefs.js:263
 msgid ""
 "Allows you to rename profiles of audio devices (only effective in the "
 "profile switcher)"
 msgstr ""
 
-#: dist/prefs.js:242
+#: dist/prefs.js:285
 msgid "Restore original name"
 msgstr ""
 
-#: dist/prefs.js:261
+#: dist/prefs.js:304
 msgid "LibPanel settings"
 msgstr ""
 
-#: dist/prefs.js:262
+#: dist/prefs.js:305
 msgid ""
 "These settings are not specific to this extension, they apply to every panel"
 msgstr ""
 
-#: dist/prefs.js:265
+#: dist/prefs.js:308
 msgid "Lock panels"
 msgstr ""
 
-#: dist/prefs.js:266
+#: dist/prefs.js:309
 msgid "Prevent panels from being moved via drag and drop"
 msgstr ""
 
-#: dist/prefs.js:269
+#: dist/prefs.js:312
 msgid "Padding"
 msgstr ""
 
-#: dist/prefs.js:270
+#: dist/prefs.js:313
 msgid "Use this to override the default padding of the panels"
 msgstr ""
 
-#: dist/prefs.js:273
+#: dist/prefs.js:316
 msgid "Row spacing"
 msgstr ""
 
-#: dist/prefs.js:274
+#: dist/prefs.js:317
 msgid "Use this to override the default row spacing of the panels"
 msgstr ""
 
-#: dist/prefs.js:277
+#: dist/prefs.js:320
 msgid "Column spacing"
 msgstr ""
 
-#: dist/prefs.js:278
+#: dist/prefs.js:321
 msgid "Use this to override the default column spacing of the panels"
 msgstr ""
 
-#: dist/prefs.js:372
+#: dist/prefs.js:415
 msgid "Filtering mode"
 msgstr ""
 
-#: dist/prefs.js:373
+#: dist/prefs.js:416
 msgid ""
 "On blocklist mode, matching elements are removed from the list. On allowlist "
 "mode, only matching elements will be shown"
 msgstr ""
 
-#: dist/prefs.js:375
+#: dist/prefs.js:418
 msgid "Blocklist"
 msgstr ""
 
-#: dist/prefs.js:376
+#: dist/prefs.js:419
 msgid "Allowlist"
+msgstr ""
+
+#: dist/prefs.js:498
+msgid "No preferred device, the default device is left alone"
+msgstr ""
+
+#: dist/prefs.js:517
+msgid "Move up"
+msgstr ""
+
+#: dist/prefs.js:519
+msgid "Move down"
+msgstr ""
+
+#: dist/prefs.js:521
+msgid "Remove"
+msgstr ""
+
+#: dist/prefs.js:531
+msgid "Add a device"
+msgstr ""
+
+#: dist/prefs.js:536
+msgid "Add"
 msgstr ""

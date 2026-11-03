@@ -129,6 +129,30 @@ export default class QSAPPreferences extends ExtensionPreferences {
 				`Move the media controls from the notifications panel instead of creating a new one`,
 			),
 		});
+		mpris_controllers_group.add_switch("mpris-controllers-single-card", {
+			title: _("Show a single media card"),
+			subtitle: _(
+				"Only show the most relevant player (the one playing, or the last one used). Switch between players with the dots below the card or by scrolling over it",
+			),
+		});
+		mpris_controllers_group.add_switch("mpris-controllers-hide-stopped", {
+			title: _("Hide stopped players"),
+			subtitle: _(
+				"Hide players that are stopped (not just paused), e.g. a phone connected with GSConnect on which nothing is playing",
+			),
+		});
+		mpris_controllers_group.add_switch("mpris-controllers-show-progress", {
+			title: _("Show the track progress"),
+			subtitle: _(
+				"Add a progress bar with the elapsed and total time. Click or drag it to seek, if the player allows it",
+			),
+		});
+		mpris_controllers_group.add_switch("mpris-controllers-show-volume", {
+			title: _("Show the application volume"),
+			subtitle: _(
+				"Add a volume slider for the application behind the player. Hidden when no audio stream of that application is found (e.g. players from a phone)",
+			),
+		});
 
 		const applications_volume_sliders_group = new ListBox(settings);
 		applications_volume_sliders_group.add_switch("applications-volume-sliders-display-name", {
@@ -277,12 +301,58 @@ export default class QSAPPreferences extends ExtensionPreferences {
 			},
 		);
 
+		// =============================== Media controls filters group ==============================
+		const mpris_controllers_filters_group = new FilterPreferencesGroup(
+			settings,
+			"mpris-controllers-filters",
+			"mpris-controllers-filter-mode",
+			{
+				title: _("Media controls filtering"),
+				description: _(
+					"Allows you to filter the players that show up in the media controls. The content of the filters are <b>regexes</b> and are applied to the player's name (e.g. <tt>GSConnect</tt>) and D-Bus name (e.g. <tt>org.mpris.MediaPlayer2.chromium.instance1234</tt>)",
+				),
+				placeholder: _("Player name"),
+			},
+		);
+
 		page.add(main_group);
 		page.add(widgets_order_group);
 		page.add(perdevice_volume_sliders_filters_group);
 		page.add(applications_volume_sliders_filters_group);
+		page.add(mpris_controllers_filters_group);
+		page.add(this.make_preferred_devices(settings));
 		page.add(this.make_profile_renamer(settings));
 		return page;
+	}
+
+	private make_preferred_devices(settings: Gio.Settings): Adw.PreferencesGroup {
+		const group = new Adw.PreferencesGroup({
+			title: _("Preferred devices"),
+			description: _(
+				"The first available device of each list becomes the default one when the session starts and when a device is connected or disconnected. Manual changes are kept until the next device change. Devices only show up here after being connected at least once while the extension is enabled",
+			),
+		});
+
+		const enabled_row = new Adw.SwitchRow({ title: _("Manage default devices") });
+		settings.bind(
+			"preferred-devices-enabled",
+			enabled_row,
+			"active",
+			Gio.SettingsBindFlags.DEFAULT,
+		);
+		group.add(enabled_row);
+
+		for (const [direction, title] of [
+			["output", _("Output devices priority")],
+			["input", _("Input devices priority")],
+		] as const) {
+			const expander = new Adw.ExpanderRow({ title });
+			settings.bind("preferred-devices-enabled", expander, "sensitive", Gio.SettingsBindFlags.GET);
+			group.add(expander);
+			new PreferredDevicesList(settings, direction, expander);
+		}
+
+		return group;
 	}
 
 	private make_profile_renamer(settings: Gio.Settings): PreferencesGroup {
@@ -613,6 +683,115 @@ const FilterPreferencesGroup = GObject.registerClass(
 // From this point onwards, the code is mostly a reimplementation of those:
 // https://gitlab.gnome.org/GNOME/gnome-control-center/-/tree/main/panels/search
 // https://gitlab.gnome.org/GNOME/libadwaita/-/blob/main/src/adw-expander-row.c
+
+/**
+ * Content of an expander row editing one priority list (`preferred-{output,input}-devices`).
+ * Devices are picked from `known-{output,input}-devices`, which is filled by the extension.
+ */
+class PreferredDevicesList {
+	private _settings: Gio.Settings;
+	private _list_key: string;
+	private _known_key: string;
+	private _expander: Adw.ExpanderRow;
+	private _rows: Adw.PreferencesRow[];
+
+	constructor(settings: Gio.Settings, direction: "output" | "input", expander: Adw.ExpanderRow) {
+		this._settings = settings;
+		this._list_key = `preferred-${direction}-devices`;
+		this._known_key = `known-${direction}-devices`;
+		this._expander = expander;
+		this._rows = [];
+
+		settings.connect(`changed::${this._list_key}`, () => this._rebuild());
+		settings.connect(`changed::${this._known_key}`, () => this._rebuild());
+		this._rebuild();
+	}
+
+	private _get_known(): Record<string, string> {
+		return this._settings.get_value(this._known_key).recursiveUnpack() as Record<string, string>;
+	}
+
+	private _rebuild() {
+		for (const row of this._rows) this._expander.remove(row);
+		this._rows = [];
+
+		const list = this._settings.get_strv(this._list_key);
+		const known = this._get_known();
+		this._expander.subtitle =
+			list.length > 0
+				? list.map(name => known[name] ?? name).join(" → ")
+				: _("No preferred device, the default device is left alone");
+
+		list.forEach((name, index) => {
+			const row = new Adw.ActionRow({
+				title: GLib.markup_escape_text(known[name] ?? name, -1),
+				subtitle: GLib.markup_escape_text(name, -1),
+				subtitle_selectable: true,
+			});
+			row.add_prefix(new Gtk.Label({ label: `${index + 1}.`, css_classes: ["dim-label"] }));
+
+			const make_button = (icon_name: string, tooltip: string, callback: () => void) => {
+				const button = new Gtk.Button({
+					icon_name,
+					tooltip_text: tooltip,
+					has_frame: false,
+					valign: Gtk.Align.CENTER,
+				});
+				button.connect("clicked", callback);
+				row.add_suffix(button);
+				return button;
+			};
+			make_button("go-up-symbolic", _("Move up"), () => this._move(index, -1)).sensitive =
+				index > 0;
+			make_button("go-down-symbolic", _("Move down"), () => this._move(index, 1)).sensitive =
+				index < list.length - 1;
+			make_button("user-trash-symbolic", _("Remove"), () => {
+				this._settings.set_strv(
+					this._list_key,
+					list.filter((_n, i) => i !== index),
+				);
+			});
+
+			this._add_row(row);
+		});
+
+		const available = Object.entries(known)
+			.filter(([name]) => !list.includes(name))
+			.sort(([_a, a], [_b, b]) => a.localeCompare(b));
+		if (available.length > 0) {
+			const add_row = new Adw.ComboRow({
+				title: _("Add a device"),
+				model: Gtk.StringList.new(available.map(([_n, description]) => description)),
+			});
+			const add_button = new Gtk.Button({
+				icon_name: "list-add-symbolic",
+				tooltip_text: _("Add"),
+				has_frame: false,
+				valign: Gtk.Align.CENTER,
+			});
+			add_button.connect("clicked", () => {
+				const selected = available[add_row.selected];
+				if (selected) this._settings.set_strv(this._list_key, [...list, selected[0]]);
+			});
+			add_row.add_suffix(add_button);
+			this._add_row(add_row);
+		}
+	}
+
+	private _add_row(row: Adw.PreferencesRow) {
+		this._expander.add_row(row);
+		this._rows.push(row);
+	}
+
+	private _move(index: number, step: number) {
+		const list = this._settings.get_strv(this._list_key);
+		const target = index + step;
+		if (target < 0 || target >= list.length) return;
+
+		[list[index], list[target]] = [list[target], list[index]];
+		this._settings.set_strv(this._list_key, list);
+	}
+}
 
 const ReorderablePreferencesGroup = GObject.registerClass(
 	class ReorderablePreferencesGroup extends Adw.PreferencesGroup {

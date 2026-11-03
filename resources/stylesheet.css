@@ -55,3 +55,35 @@
 	/* Nice ellepsis if the text overflow */
 	text-overflow: ellipsis;
 }
+
+/* Dots used to switch between players in single card mode */
+.QSAP-media-dots {
+	spacing: 2px;
+}
+
+.QSAP-media-dot {
+	padding: 4px;
+	border-radius: 99px;
+}
+
+/* Progress bar and volume slider at the bottom of media cards */
+.QSAP-media-extras {
+	spacing: 4px;
+	padding: 0px 12px 8px 12px;
+}
+
+.QSAP-media-progress,
+.QSAP-media-volume {
+	spacing: 8px;
+}
+
+.QSAP-media-time {
+	font-size: 9pt;
+	font-feature-settings: "tnum";
+	min-width: 32px;
+}
+
+.QSAP-media-volume-icon {
+	padding: 2px;
+	border-radius: 99px;
+}
